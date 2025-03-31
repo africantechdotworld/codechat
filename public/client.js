@@ -2,6 +2,8 @@
 let username = prompt('Enter your username:');
 let ws;
 let editor;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 // Initialize CodeMirror
 function initCodeMirror() {
@@ -42,35 +44,55 @@ function initCodeMirror() {
 
 // Initialize WebSocket
 function initWebSocket() {
-    // Use environment variable for WebSocket URL, fallback to localhost for development
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:10000';
+    // Get the WebSocket URL from window.location or use a default
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = window.WS_URL || `${protocol}//${window.location.hostname}:10000/ws`;
     
-    ws = new WebSocket(wsUrl);
+    try {
+        ws = new WebSocket(wsUrl);
 
-    ws.onopen = () => {
-        console.log('Connected to server');
-        updateStatus(true);
-    };
+        ws.onopen = () => {
+            console.log('Connected to server');
+            updateStatus(true);
+            reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+        };
 
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'code') {
-            editor.setValue(data.content);
-        }
-    };
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'code') {
+                    editor.setValue(data.content);
+                }
+            } catch (error) {
+                console.error('Error processing message:', error);
+            }
+        };
 
-    ws.onclose = () => {
-        console.log('Disconnected from server');
+        ws.onclose = () => {
+            console.log('Disconnected from server');
+            updateStatus(false);
+            
+            // Handle reconnection with exponential backoff
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                reconnectAttempts++;
+                console.log(`Attempting to reconnect in ${delay/1000} seconds... (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+                setTimeout(initWebSocket, delay);
+            } else {
+                console.error('Max reconnection attempts reached');
+                updateStatus(false, 'Connection failed. Please refresh the page.');
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            updateStatus(false);
+        };
+    } catch (error) {
+        console.error('Failed to initialize WebSocket:', error);
         updateStatus(false);
-        // Try to reconnect after 5 seconds
-        setTimeout(initWebSocket, 5000);
-    };
-
-    ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        updateStatus(false);
-    };
+    }
 }
 
 // UI Elements

@@ -8,58 +8,72 @@ const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
 
-// Get local IP address
-function getLocalIP() {
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-        for (const iface of interfaces[name]) {
-            // Skip internal and non-IPv4 addresses
-            if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address;
-            }
-        }
-    }
-    return 'localhost';
-}
+// Enable CORS
+app.use(cors({
+    origin: '*', // In production, replace with your Vercel domain
+    methods: ['GET', 'POST'],
+    credentials: true
+}));
 
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve IP address to client
-app.get('/ip', (req, res) => {
-    res.json({ ip: getLocalIP() });
+// Create WebSocket server
+const wss = new WebSocket.Server({ 
+    server,
+    path: '/ws', // Add a specific path for WebSocket connections
+    perMessageDeflate: {
+        zlibDeflateOptions: {
+            chunkSize: 1024,
+            memLevel: 7,
+            level: 3
+        },
+        zlibInflateOptions: {
+            chunkSize: 10 * 1024
+        },
+        clientNoContextTakeover: true,
+        serverNoContextTakeover: true,
+        serverMaxWindowBits: 10,
+        concurrencyLimit: 10,
+        threshold: 1024
+    }
 });
 
 // Store connected clients
 const clients = new Set();
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
     clients.add(ws);
-    console.log('New client connected');
+    console.log('New client connected from:', req.socket.remoteAddress);
 
     ws.on('message', (message) => {
-        const data = JSON.parse(message);
-        
-        // Broadcast message to all connected clients except sender
-        clients.forEach((client) => {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify(data));
-            }
-        });
+        try {
+            const data = JSON.parse(message);
+            
+            // Broadcast message to all connected clients except sender
+            clients.forEach((client) => {
+                if (client !== ws && client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify(data));
+                }
+            });
+        } catch (error) {
+            console.error('Error processing message:', error);
+        }
     });
 
     ws.on('close', () => {
         clients.delete(ws);
         console.log('Client disconnected');
     });
+
+    ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+        clients.delete(ws);
+    });
 });
 
-const PORT = process.env.PORT || 2000;
-server.listen(PORT, () => {
-    const localIP = getLocalIP();
-    console.log(`Server running on:`);
-    console.log(`Local: http://localhost:${PORT}`);
-    console.log(`Network: http://${localIP}:${PORT}`);
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`WebSocket server running on port ${PORT}`);
 });
