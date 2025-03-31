@@ -4,6 +4,7 @@ const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
 const os = require('os');
+const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);

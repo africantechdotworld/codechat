@@ -40,43 +40,37 @@ function initCodeMirror() {
     });
 }
 
-// Get server IP and initialize WebSocket
-async function initWebSocket() {
-    try {
-        const response = await fetch('/ip');
-        const data = await response.json();
-        const serverIP = data.ip;
+// Initialize WebSocket
+function initWebSocket() {
+    // Use environment variable for WebSocket URL, fallback to localhost for development
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:2000';
+    
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+        console.log('Connected to server');
+        updateStatus(true);
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
         
-        ws = new WebSocket(`ws://${serverIP}:2000`);
+        if (data.type === 'code') {
+            editor.setValue(data.content);
+        }
+    };
 
-        ws.onopen = () => {
-            console.log('Connected to server');
-            updateStatus(true);
-        };
-
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            
-            if (data.type === 'code') {
-                editor.setValue(data.content);
-            }
-        };
-
-        ws.onclose = () => {
-            console.log('Disconnected from server');
-            updateStatus(false);
-            // Try to reconnect after 5 seconds
-            setTimeout(initWebSocket, 5000);
-        };
-
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            updateStatus(false);
-        };
-    } catch (error) {
-        console.error('Failed to get server IP:', error);
+    ws.onclose = () => {
+        console.log('Disconnected from server');
         updateStatus(false);
-    }
+        // Try to reconnect after 5 seconds
+        setTimeout(initWebSocket, 5000);
+    };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        updateStatus(false);
+    };
 }
 
 // UI Elements
