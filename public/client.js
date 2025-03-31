@@ -43,7 +43,7 @@ function initCodeMirror() {
 // Initialize WebSocket
 function initWebSocket() {
     // Use environment variable for WebSocket URL, fallback to localhost for development
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:2000';
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:10000';
     
     ws = new WebSocket(wsUrl);
 
